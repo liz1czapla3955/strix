@@ -738,7 +738,7 @@ def _parse_name_status_z(raw_output: bytes) -> list[DiffEntry]:
         # Backward-compat fallback if output is tab-delimited unexpectedly.
         status_fallback, has_tab, first_path = token.partition("\t")
         if not has_tab:
-                break
+            break
         fallback_code = status_fallback[:1]
         fallback_similarity: int | None = None
         if len(status_fallback) > 1 and status_fallback[1:].isdigit():

@@ -36,10 +36,13 @@ mkdir -p "$ART"
 
 semgrep scan --config p/default --config p/golang --config p/secrets \
   --metrics=off --json --output "$ART/semgrep.json" .
-sg scan --json . > "$ART/ast-grep.json"
+# Ruleless AST pass (works without sgconfig.yml/rules project setup)
+sg run --pattern '$F($$$ARGS)' --json=stream . > "$ART/ast-grep.json" 2> "$ART/ast-grep.log" || true
 gitleaks detect --source . --report-format json --report-path "$ART/gitleaks.json" || true
 trufflehog filesystem --no-update --json --no-verification . > "$ART/trufflehog.json" || true
-trivy fs --format json --output "$ART/trivy-fs.json" .
+# Keep trivy focused on vuln/misconfig (secrets already covered above) and increase timeout for large repos
+trivy fs --scanners vuln,misconfig --timeout 30m --offline-scan \
+  --format json --output "$ART/trivy-fs.json" . || true
 ```
 
 If one tool is skipped or fails, record that in the shared wiki note along with the reason.
@@ -64,7 +67,8 @@ If diff scope is active, restrict to changed files first, then expand only when 
 Use `sg` for structure-aware code hunting:
 
 ```bash
-sg scan --json . > /workspace/.strix-source-aware/ast-grep.json
+# Ruleless one-off structural pass (no sgconfig.yml required)
+sg run --pattern '$F($$$ARGS)' --json=stream . > /workspace/.strix-source-aware/ast-grep.json 2> /workspace/.strix-source-aware/ast-grep.log || true
 ```
 
 Target high-value patterns such as:
@@ -95,7 +99,8 @@ trufflehog filesystem --json . > /workspace/.strix-source-aware/trufflehog.json
 Run repository-wide dependency and config checks:
 
 ```bash
-trivy fs --format json --output /workspace/.strix-source-aware/trivy-fs.json .
+trivy fs --scanners vuln,misconfig --timeout 30m --offline-scan \
+  --format json --output /workspace/.strix-source-aware/trivy-fs.json . || true
 ```
 
 ## Converting Static Signals Into Exploits

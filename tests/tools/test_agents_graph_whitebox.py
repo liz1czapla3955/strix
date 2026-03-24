@@ -164,14 +164,14 @@ def test_agent_finish_appends_wiki_update_for_whitebox(monkeypatch) -> None:
             },
         }
 
-    def fake_update_note(note_id: str, content: str):
+    def fake_append_note_content(note_id: str, delta: str):
         captured["note_id"] = note_id
-        captured["content"] = content
+        captured["delta"] = delta
         return {"success": True, "note_id": note_id}
 
     monkeypatch.setattr("strix.tools.notes.notes_actions.list_notes", fake_list_notes)
     monkeypatch.setattr("strix.tools.notes.notes_actions.get_note", fake_get_note)
-    monkeypatch.setattr("strix.tools.notes.notes_actions.update_note", fake_update_note)
+    monkeypatch.setattr("strix.tools.notes.notes_actions.append_note_content", fake_append_note_content)
 
     state = SimpleNamespace(agent_id=child_id, parent_id=parent_id)
     result = agents_graph_actions.agent_finish(
@@ -185,8 +185,8 @@ def test_agent_finish_appends_wiki_update_for_whitebox(monkeypatch) -> None:
     assert result["agent_completed"] is True
     assert captured_get["note_id"] == "wiki-note-1"
     assert captured["note_id"] == "wiki-note-1"
-    assert "Agent Update: Child" in captured["content"]
-    assert "AST pass completed" in captured["content"]
+    assert "Agent Update: Child" in captured["delta"]
+    assert "AST pass completed" in captured["delta"]
 
 
 def test_run_agent_in_thread_injects_shared_wiki_context_in_whitebox(monkeypatch) -> None:

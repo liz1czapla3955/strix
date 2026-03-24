@@ -123,7 +123,7 @@ def _append_wiki_update_on_finish(
         return
 
     try:
-        from strix.tools.notes.notes_actions import update_note
+        from strix.tools.notes.notes_actions import append_note_content
 
         note = _load_primary_wiki_note(agent_state)
         if not note:
@@ -133,7 +133,6 @@ def _append_wiki_update_on_finish(
         if not isinstance(note_id, str) or not note_id:
             return
 
-        existing_content = str(note.get("content") or "")
         timestamp = datetime.now(UTC).isoformat()
         summary = " ".join(str(result_summary).split())
         if len(summary) > 1200:
@@ -151,8 +150,7 @@ def _append_wiki_update_on_finish(
             "Recommendations:\n"
             f"{recommendation_lines}\n"
         )
-        updated_content = f"{existing_content.rstrip()}{delta}"
-        update_note(note_id=note_id, content=updated_content)
+        append_note_content(note_id=note_id, delta=delta)
     except Exception:
         # Best-effort update; never block agent completion on note persistence.
         return

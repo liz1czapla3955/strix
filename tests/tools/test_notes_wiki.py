@@ -137,3 +137,36 @@ def test_get_note_returns_full_note(tmp_path: Path, monkeypatch) -> None:
     finally:
         _reset_notes_state()
         set_global_tracer(previous_tracer)  # type: ignore[arg-type]
+
+
+def test_append_note_content_appends_delta(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _reset_notes_state()
+
+    previous_tracer = get_global_tracer()
+    tracer = Tracer("append-note-run")
+    set_global_tracer(tracer)
+
+    try:
+        created = notes_actions.create_note(
+            title="Repo wiki",
+            content="base",
+            category="wiki",
+            tags=["repo:demo"],
+        )
+        assert created["success"] is True
+        note_id = created["note_id"]
+        assert isinstance(note_id, str)
+
+        appended = notes_actions.append_note_content(
+            note_id=note_id,
+            delta="\n\n## Agent Update: worker\nSummary: done",
+        )
+        assert appended["success"] is True
+
+        loaded = notes_actions.get_note(note_id=note_id)
+        assert loaded["success"] is True
+        assert loaded["note"]["content"] == "base\n\n## Agent Update: worker\nSummary: done"
+    finally:
+        _reset_notes_state()
+        set_global_tracer(previous_tracer)  # type: ignore[arg-type]
