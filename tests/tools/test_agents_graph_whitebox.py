@@ -296,3 +296,120 @@ def test_load_primary_wiki_note_prefers_repo_tag_match(monkeypatch) -> None:
     assert note is not None
     assert note["note_id"] == "wiki-target"
     assert selected_note_ids == ["wiki-target"]
+
+
+def test_load_primary_wiki_note_prefers_requested_wiki_kind(monkeypatch) -> None:
+    selected_note_ids: list[str] = []
+
+    def fake_list_notes(category=None):
+        assert category == "wiki"
+        return {
+            "success": True,
+            "notes": [
+                {"note_id": "wiki-security", "tags": ["repo:appsmith", "wiki:security"]},
+                {"note_id": "wiki-overview", "tags": ["repo:appsmith", "wiki:overview"]},
+            ],
+            "total_count": 2,
+        }
+
+    def fake_get_note(note_id: str):
+        selected_note_ids.append(note_id)
+        return {
+            "success": True,
+            "note": {
+                "note_id": note_id,
+                "title": "Repo Wiki",
+                "content": "content",
+            },
+        }
+
+    monkeypatch.setattr("strix.tools.notes.notes_actions.list_notes", fake_list_notes)
+    monkeypatch.setattr("strix.tools.notes.notes_actions.get_note", fake_get_note)
+
+    agent_state = SimpleNamespace(task="analyze /workspace/appsmith")
+    overview_note = agents_graph_actions._load_primary_wiki_note(
+        agent_state,
+        preferred_kind="overview",
+        allow_kind_fallback=False,
+    )
+    security_note = agents_graph_actions._load_primary_wiki_note(
+        agent_state,
+        preferred_kind="security",
+        allow_kind_fallback=True,
+    )
+
+    assert overview_note is not None
+    assert security_note is not None
+    assert overview_note["note_id"] == "wiki-overview"
+    assert security_note["note_id"] == "wiki-security"
+    assert selected_note_ids == ["wiki-overview", "wiki-security"]
+
+
+def test_agent_finish_prefers_security_wiki_for_append(monkeypatch) -> None:
+    monkeypatch.setenv("STRIX_LLM", "openai/gpt-5")
+
+    agents_graph_actions._agent_graph["nodes"].clear()
+    agents_graph_actions._agent_graph["edges"].clear()
+    agents_graph_actions._agent_messages.clear()
+    agents_graph_actions._running_agents.clear()
+    agents_graph_actions._agent_instances.clear()
+    agents_graph_actions._agent_states.clear()
+
+    parent_id = "parent-sec"
+    child_id = "child-sec"
+    agents_graph_actions._agent_graph["nodes"][parent_id] = {
+        "name": "Parent",
+        "task": "parent task",
+        "status": "running",
+        "parent_id": None,
+    }
+    agents_graph_actions._agent_graph["nodes"][child_id] = {
+        "name": "Child",
+        "task": "child task",
+        "status": "running",
+        "parent_id": parent_id,
+    }
+    agents_graph_actions._agent_instances[child_id] = SimpleNamespace(
+        llm_config=LLMConfig(is_whitebox=True)
+    )
+
+    captured: dict[str, str] = {}
+
+    def fake_list_notes(category=None):
+        assert category == "wiki"
+        return {
+            "success": True,
+            "notes": [
+                {"note_id": "wiki-overview", "tags": ["repo:appsmith", "wiki:overview"]},
+                {"note_id": "wiki-security", "tags": ["repo:appsmith", "wiki:security"]},
+            ],
+            "total_count": 2,
+        }
+
+    def fake_get_note(note_id: str):
+        return {
+            "success": True,
+            "note": {"note_id": note_id, "title": "Repo Wiki", "content": "Existing wiki content"},
+        }
+
+    def fake_append_note_content(note_id: str, delta: str):
+        captured["note_id"] = note_id
+        captured["delta"] = delta
+        return {"success": True, "note_id": note_id}
+
+    monkeypatch.setattr("strix.tools.notes.notes_actions.list_notes", fake_list_notes)
+    monkeypatch.setattr("strix.tools.notes.notes_actions.get_note", fake_get_note)
+    monkeypatch.setattr("strix.tools.notes.notes_actions.append_note_content", fake_append_note_content)
+
+    state = SimpleNamespace(agent_id=child_id, parent_id=parent_id, task="analyze /workspace/appsmith")
+    result = agents_graph_actions.agent_finish(
+        agent_state=state,
+        result_summary="Static triage completed",
+        findings=["Found candidate sink"],
+        success=True,
+        final_recommendations=["Validate with dynamic PoC"],
+    )
+
+    assert result["agent_completed"] is True
+    assert captured["note_id"] == "wiki-security"
+    assert "Static triage completed" in captured["delta"]

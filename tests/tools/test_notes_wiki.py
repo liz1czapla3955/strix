@@ -124,7 +124,7 @@ def test_get_note_returns_full_note(tmp_path: Path, monkeypatch) -> None:
             title="Repo wiki",
             content="entrypoints and sinks",
             category="wiki",
-            tags=["repo:appsmith"],
+            tags=["repo:appsmith", "wiki:security"],
         )
         assert created["success"] is True
         note_id = created["note_id"]
@@ -134,6 +134,7 @@ def test_get_note_returns_full_note(tmp_path: Path, monkeypatch) -> None:
         assert result["success"] is True
         assert result["note"]["note_id"] == note_id
         assert result["note"]["content"] == "entrypoints and sinks"
+        assert result["note"]["wiki_kind"] == "security"
     finally:
         _reset_notes_state()
         set_global_tracer(previous_tracer)  # type: ignore[arg-type]
@@ -209,6 +210,58 @@ def test_list_and_get_note_handle_wiki_repersist_oserror_gracefully(
         assert fetched["success"] is True
         assert fetched["note"]["note_id"] == note_id
         assert fetched["note"]["content"] == "initial wiki content"
+    finally:
+        _reset_notes_state()
+        set_global_tracer(previous_tracer)  # type: ignore[arg-type]
+
+
+def test_wiki_index_tracks_overview_and_security_notes(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _reset_notes_state()
+
+    previous_tracer = get_global_tracer()
+    tracer = Tracer("wiki-index-run")
+    set_global_tracer(tracer)
+
+    try:
+        overview = notes_actions.create_note(
+            title="Repo overview wiki",
+            content="architecture and entrypoints",
+            category="wiki",
+            tags=["repo:demo", "wiki:overview"],
+        )
+        assert overview["success"] is True
+        overview_id = overview["note_id"]
+        assert isinstance(overview_id, str)
+
+        security = notes_actions.create_note(
+            title="Repo security wiki",
+            content="scanner summary and follow-ups",
+            category="wiki",
+            tags=["repo:demo", "wiki:security"],
+        )
+        assert security["success"] is True
+        security_id = security["note_id"]
+        assert isinstance(security_id, str)
+
+        wiki_index = tmp_path / "strix_runs" / "wiki-index-run" / "wiki" / "index.json"
+        assert wiki_index.exists() is True
+        index_data = wiki_index.read_text(encoding="utf-8")
+        assert '"wiki_kind": "overview"' in index_data
+        assert '"wiki_kind": "security"' in index_data
+
+        listed = notes_actions.list_notes(category="wiki")
+        assert listed["success"] is True
+        note_kinds = {note["note_id"]: note.get("wiki_kind") for note in listed["notes"]}
+        assert note_kinds[overview_id] == "overview"
+        assert note_kinds[security_id] == "security"
+
+        deleted = notes_actions.delete_note(note_id=overview_id)
+        assert deleted["success"] is True
+
+        index_after_delete = wiki_index.read_text(encoding="utf-8")
+        assert overview_id not in index_after_delete
+        assert security_id in index_after_delete
     finally:
         _reset_notes_state()
         set_global_tracer(previous_tracer)  # type: ignore[arg-type]

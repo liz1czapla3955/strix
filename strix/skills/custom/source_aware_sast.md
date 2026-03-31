@@ -19,12 +19,12 @@ Before scanning, check shared wiki memory:
 
 ```text
 1) list_notes(category="wiki")
-2) get_note(note_id=...) for the selected repo wiki before analysis
-3) Reuse matching repo wiki note if present
-4) create_note(category="wiki") only if missing
+2) get_note(note_id=...) for `wiki:overview` first, then `wiki:security`
+3) Reuse matching repo wiki notes if present
+4) create_note(category="wiki") only if missing (with tags `wiki:overview` / `wiki:security`)
 ```
 
-After every major source-analysis batch, update the same repo wiki note with `update_note` so other agents can reuse your latest map.
+After every major source-analysis batch, update `wiki:security` with `update_note` so other agents can reuse your latest map.
 
 ## Baseline Coverage Bundle (Recommended)
 
@@ -74,7 +74,7 @@ trivy fs --scanners vuln,misconfig --timeout 30m --offline-scan \
   --format json --output "$ART/trivy-fs.json" . || true
 ```
 
-If one tool is skipped or fails, record that in the shared wiki note along with the reason.
+If one tool is skipped or fails, record that in `wiki:security` along with the reason.
 
 ## Semgrep First Pass
 
@@ -143,7 +143,7 @@ trivy fs --scanners vuln,misconfig --timeout 30m --offline-scan \
 
 ## Wiki Update Template
 
-Keep one wiki note per repository and update these sections:
+Keep `wiki:overview` and `wiki:security` per repository. Update these sections in `wiki:security`:
 
 ```text
 ## Architecture
@@ -164,4 +164,4 @@ Before `agent_finish`, make one final `update_note` call to capture:
 - Do not treat scanner output as final truth.
 - Do not spend full cycles on low-signal pattern matches.
 - Do not report source-only findings without validation evidence.
-- Do not create multiple wiki notes for the same repository when one already exists.
+- Do not create duplicate `wiki:overview` or `wiki:security` notes for the same repository.

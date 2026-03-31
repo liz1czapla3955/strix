@@ -4,6 +4,7 @@
     <details>Use this tool for documenting discoveries, observations, methodology notes, and questions.
   This is your personal and shared run memory for recording information you want to remember or reference later.
   Use category "wiki" for repository source maps shared across agents in the same run.
+  For Codewiki patterns, prefer wiki tags `wiki:overview` and `wiki:security` for stable note roles.
   For tracking actionable tasks, use the todo tool instead.</details>
     <parameters>
       <parameter name="title" type="string" required="true">
@@ -109,7 +110,7 @@ The /api/internal/* endpoints are high priority as they appear to lack authentic
       </parameter>
     </parameters>
     <returns type="Dict[str, Any]">
-      <description>Response containing: - notes: List of matching notes (metadata + optional content/content_preview) - total_count: Total number of notes found</description>
+      <description>Response containing: - notes: List of matching notes (metadata + optional content/content_preview; wiki entries include wiki_kind) - total_count: Total number of notes found</description>
     </returns>
     <examples>
   # List all findings

@@ -44,14 +44,16 @@ Coverage target per repository:
 
 ## Wiki Note Requirement (Source Map)
 
-When source is present, maintain one wiki note per repository and keep it current.
+When source is present, maintain two stable wiki notes per repository and keep them current:
+- `wiki:overview` for architecture/source-map context
+- `wiki:security` for scanner and validation deltas
 
 Operational rules:
-- At task start, call `list_notes` with `category=wiki`, then read the selected wiki with `get_note(note_id=...)`.
-- If no repo wiki exists, create one with `create_note` and `category=wiki`.
-- Update the same wiki via `update_note`; avoid creating duplicate wiki notes for the same repo.
-- Child agents should read wiki notes first via `get_note`, then extend with new evidence from their scope.
-- Before calling `agent_finish`, each source-focused child agent should append a short delta update to the shared repo wiki (scanner outputs, route/sink map deltas, dynamic follow-ups).
+- At task start, call `list_notes` with `category=wiki`; read `wiki:overview` first, then `wiki:security` via `get_note(note_id=...)`.
+- If wiki notes are missing, create them with `create_note`, `category=wiki`, and tags including `wiki:overview` or `wiki:security`.
+- Update existing notes via `update_note`; avoid creating duplicates.
+- Child agents should read both notes first, then extend with new evidence from their scope.
+- Before calling `agent_finish`, each source-focused child agent should append a short delta update to `wiki:security` (scanner outputs, route/sink map deltas, dynamic follow-ups).
 
 Recommended sections:
 - Architecture overview

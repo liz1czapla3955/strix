@@ -15,6 +15,28 @@ _loaded_notes_run_dir: str | None = None
 _DEFAULT_CONTENT_PREVIEW_CHARS = 280
 
 
+def _note_tag_set(note: dict[str, Any]) -> set[str]:
+    tags = note.get("tags", [])
+    if not isinstance(tags, list):
+        return set()
+    return {str(tag).strip().lower() for tag in tags if str(tag).strip()}
+
+
+def _infer_wiki_kind(note: dict[str, Any]) -> str:
+    tag_set = _note_tag_set(note)
+    if "wiki:overview" in tag_set:
+        return "overview"
+    if "wiki:security" in tag_set:
+        return "security"
+
+    title = str(note.get("title", "")).lower()
+    if "overview" in title or "architecture" in title:
+        return "overview"
+    if "security" in title or "vuln" in title or "finding" in title:
+        return "security"
+    return "general"
+
+
 def _get_run_dir() -> Path | None:
     try:
         from strix.telemetry.tracer import get_global_tracer
@@ -107,6 +129,7 @@ def _ensure_notes_loaded() -> None:
             for note_id, note in _notes_storage.items():
                 if note.get("category") == "wiki":
                     _persist_wiki_note(note_id, note)
+            _persist_wiki_index()
         except OSError:
             pass
 
@@ -131,6 +154,13 @@ def _get_wiki_directory() -> Path | None:
         return None
     else:
         return wiki_dir
+
+
+def _get_wiki_index_path() -> Path | None:
+    wiki_dir = _get_wiki_directory()
+    if not wiki_dir:
+        return None
+    return wiki_dir / "index.json"
 
 
 def _get_wiki_note_path(note_id: str, note: dict[str, Any]) -> Path | None:
@@ -165,6 +195,34 @@ def _persist_wiki_note(note_id: str, note: dict[str, Any]) -> None:
         f"{note.get('content', '')}\n"
     )
     wiki_path.write_text(content, encoding="utf-8")
+
+
+def _persist_wiki_index() -> None:
+    index_path = _get_wiki_index_path()
+    if not index_path:
+        return
+
+    notes: list[dict[str, Any]] = []
+    for note_id, note in _notes_storage.items():
+        if note.get("category") != "wiki":
+            continue
+        wiki_path = _get_wiki_note_path(note_id, note)
+        notes.append(
+            {
+                "note_id": note_id,
+                "title": str(note.get("title", "")),
+                "wiki_kind": _infer_wiki_kind(note),
+                "tags": note.get("tags", []),
+                "created_at": note.get("created_at", ""),
+                "updated_at": note.get("updated_at", ""),
+                "wiki_filename": note.get("wiki_filename", ""),
+                "wiki_path": wiki_path.name if wiki_path else "",
+            }
+        )
+
+    notes.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    payload = {"generated_at": datetime.now(UTC).isoformat(), "notes": notes}
+    index_path.write_text(f"{json.dumps(payload, ensure_ascii=True, indent=2)}\n", encoding="utf-8")
 
 
 def _remove_wiki_note(note_id: str, note: dict[str, Any]) -> None:
@@ -225,6 +283,9 @@ def _to_note_listing_entry(
     wiki_filename = note.get("wiki_filename")
     if isinstance(wiki_filename, str) and wiki_filename:
         entry["wiki_filename"] = wiki_filename
+
+    if note.get("category") == "wiki":
+        entry["wiki_kind"] = _infer_wiki_kind(note)
 
     content = str(note.get("content", ""))
     if include_content:
@@ -290,6 +351,7 @@ def create_note(  # noqa: PLR0911
             _append_note_event("create", note_id, note)
             if category == "wiki":
                 _persist_wiki_note(note_id, note)
+                _persist_wiki_index()
 
         except (ValueError, TypeError) as e:
             return {"success": False, "error": f"Failed to create note: {e}", "note_id": None}
@@ -356,6 +418,8 @@ def get_note(note_id: str) -> dict[str, Any]:
 
             note_with_id = note.copy()
             note_with_id["note_id"] = note_id
+            if note.get("category") == "wiki":
+                note_with_id["wiki_kind"] = _infer_wiki_kind(note)
 
         except (ValueError, TypeError) as e:
             return {
@@ -420,6 +484,7 @@ def update_note(
             _append_note_event("update", note_id, note)
             if note.get("category") == "wiki":
                 _persist_wiki_note(note_id, note)
+                _persist_wiki_index()
 
             return {
                 "success": True,
@@ -443,10 +508,13 @@ def delete_note(note_id: str) -> dict[str, Any]:
 
             note = _notes_storage[note_id]
             note_title = note["title"]
-            if note.get("category") == "wiki":
+            is_wiki = note.get("category") == "wiki"
+            if is_wiki:
                 _remove_wiki_note(note_id, note)
             del _notes_storage[note_id]
             _append_note_event("delete", note_id)
+            if is_wiki:
+                _persist_wiki_index()
 
         except (ValueError, TypeError) as e:
             return {"success": False, "error": f"Failed to delete note: {e}"}
